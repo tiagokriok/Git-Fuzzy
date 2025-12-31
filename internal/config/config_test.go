@@ -74,21 +74,18 @@ func TestLoad_FileNotExists(t *testing.T) {
 
 	cfg, err := load(configFile)
 
-	assertNoError(t, err)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
 
-	if cfg == nil {
-		t.Fatal("config is nil")
+	if cfg != nil {
+		t.Errorf("expected nil config, got %v", cfg)
 	}
 
 	_, err = os.Stat(configFile)
-	if err != nil {
-		t.Fatalf("failed to stat config file: %v", err)
+	if err == nil {
+		t.Fatal("expected file not to exist")
 	}
-
-	if cfg.Editor != "nvim" {
-		t.Errorf("expected editor %q, got %q", "nvim", cfg.Editor)
-	}
-
 }
 
 func TestSave_CreatesDirectory(t *testing.T) {
