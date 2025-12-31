@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,8 +14,22 @@ import (
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-		os.Exit(1)
+		if errors.Is(err, os.ErrNotExist) {
+			cfg, err = setupWizard()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error setting up configuration: %v\n", err)
+				os.Exit(1)
+			}
+
+			err = cfg.Save()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error saving configuration: %v\n", err)
+				os.Exit(1)
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	repos, err := scanner.Scan(cfg.SearchPaths)
@@ -52,4 +67,8 @@ func openRepositoryInEditor(editor string, path string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+func setupWizard() (*config.Config, error) {
+	return ui.RunSetup()
 }
