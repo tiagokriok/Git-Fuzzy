@@ -15,6 +15,17 @@ A high-performance CLI tool for discovering and opening Git repositories with in
 
 ### Installation
 
+#### Using Makefile (Recommended)
+
+```bash
+git clone https://github.com/tiagokriok/gf.git
+cd gf
+make build          # Build the binary
+make install        # Install to $GOPATH/bin
+```
+
+#### Manual Build
+
 ```bash
 git clone https://github.com/tiagokriok/gf.git
 cd gf
@@ -44,6 +55,26 @@ On first run, an interactive wizard creates `~/.config/gf/config.json`:
 
 Customize by editing the configuration file directly or re-running the setup wizard.
 
+### Makefile Commands
+
+```bash
+make help              # Show all available commands
+make build             # Build the gf binary
+make build-optimized   # Build optimized binary (29% smaller)
+make run               # Run gf directly
+make test              # Run all tests
+make test-verbose      # Run tests with verbose output
+make test-coverage     # Generate coverage report (opens HTML)
+make fmt               # Format code
+make lint              # Run go vet
+make clean             # Remove build artifacts
+make install           # Install to $GOPATH/bin
+make deps              # Download and manage dependencies
+make reset-local       # Reset config and binary for fresh start
+make check             # Run fmt, lint, and test
+make dev               # Full development workflow (clean, fmt, lint, test, build)
+```
+
 ## Keyboard Shortcuts
 
 - `↑` / `↓` or `Tab` / `Shift+Tab`: Navigate repositories
@@ -59,17 +90,22 @@ Customize by editing the configuration file directly or re-running the setup wiz
 ```
 gf/
 ├── cmd/gf/
-│   └── main.go              # Application entry point & editor integration
+│   └── main.go                      # Application entry point & editor integration
 ├── internal/
 │   ├── config/
-│   │   ├── config.go        # Configuration management (load/save/defaults)
-│   │   └── config_test.go   # Unit tests (62.8% coverage)
+│   │   ├── config.go                # Configuration management (load/save/defaults)
+│   │   └── config_test.go           # Unit tests (62.9% coverage)
+│   ├── history/
+│   │   └── recent.go                # Recent repositories tracking & persistence
 │   ├── scanner/
-│   │   ├── scanner.go       # Repository discovery with optimized traversal
-│   │   └── scanner_test.go  # Unit tests (85.7% coverage)
+│   │   ├── scanner.go               # Repository discovery with optimized traversal
+│   │   │                             # Includes ReorderByRecent() for intelligent sorting
+│   │   └── scanner_test.go          # Unit tests (60.0% coverage)
 │   └── ui/
-│       ├── ui.go            # Interactive TUI & result rendering
-│       └── setup.go         # Setup wizard for first-run configuration
+│       ├── ui.go                    # Interactive TUI & result rendering
+│       └── setup.go                 # Setup wizard for first-run configuration
+├── Makefile                         # Development workflow automation
+├── .gitignore                       # Git ignore patterns
 ├── go.mod
 └── go.sum
 ```
@@ -117,10 +153,11 @@ go mod download
 
 ### Test Coverage Summary
 
-- **Config Package**: 62.8% coverage (6 tests)
-- **Scanner Package**: 85.7% coverage (5 tests)
+- **Config Package**: 62.9% coverage (6 tests)
+- **Scanner Package**: 60.0% coverage (5 tests)
+- **History Package**: Implemented (pending unit tests)
 - **UI Package**: Manual testing (TUI interaction testing)
-- **Total**: 11 passing tests
+- **Total**: 11 passing tests ✅
 
 ## Technology Stack
 
@@ -171,6 +208,27 @@ node_modules, vendor, target        # Dependency/build directories
 ```
 
 This intelligent filtering enables sub-second repository discovery even in large directory trees.
+
+## Recent Updates
+
+### Version 0.1.0
+
+#### ✨ New Features
+- **Makefile**: Complete development workflow automation with 15+ targets
+- **Binary Optimization**: Build-time flag optimization reduces binary size by 29% (5.1M → 3.6M)
+- **Recent Repositories**: Track and prioritize last 10 opened repositories
+- **Intelligent Sorting**: Automatically reorder search results by most recent usage
+
+#### 🔧 Improvements
+- `.gitignore`: Fixed to properly ignore only `/gf` binary, not `cmd/gf` directory
+- Test Coverage: Now at 11 passing tests across config and scanner packages
+- Code Quality: Full `go fmt`, `go vet` compliance with error wrapping
+
+#### 📊 Project Stats
+- **Lines of Code**: ~990 (production: 700, tests: 290)
+- **Binary Size**: 5.1M (standard), 3.6M (optimized)
+- **Test Pass Rate**: 100% (11/11 tests passing)
+- **Supported Go Version**: 1.25.5+
 
 ## License
 
