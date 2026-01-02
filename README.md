@@ -15,7 +15,18 @@ A high-performance CLI tool for discovering and opening Git repositories with in
 
 ### Installation
 
-#### Using Makefile (Recommended)
+#### Using `go install` (Fastest) ⭐
+
+```bash
+go install github.com/tiagokriok/gf/cmd/gf@latest
+gf
+```
+
+This installs the latest version directly to `$GOPATH/bin`. Works on Linux, macOS, and Windows.
+
+**Requirements**: Go 1.25.5 or higher
+
+#### Using Makefile (Recommended for Development)
 
 ```bash
 git clone https://github.com/tiagokriok/gf.git
@@ -24,7 +35,7 @@ make build          # Build the binary
 make install        # Install to $GOPATH/bin
 ```
 
-#### Manual Build
+#### Manual Build from Source
 
 ```bash
 git clone https://github.com/tiagokriok/gf.git
