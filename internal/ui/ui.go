@@ -8,7 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sahilm/fuzzy"
-	"github.com/tiagokriok/gf/internal/scanner"
+	"github.com/tiagokriok/Git-Fuzzy/internal/scanner"
 )
 
 var selectedRepository *scanner.Repository

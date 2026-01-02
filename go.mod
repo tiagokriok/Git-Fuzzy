@@ -1,4 +1,4 @@
-module github.com/tiagokriok/gf
+module github.com/tiagokriok/Git-Fuzzy
 
 go 1.25.5
 

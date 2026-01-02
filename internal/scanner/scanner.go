@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/tiagokriok/gf/internal/history"
+	"github.com/tiagokriok/Git-Fuzzy/internal/history"
 )
 
 type Repository struct {

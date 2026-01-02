@@ -6,10 +6,10 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/tiagokriok/gf/internal/config"
-	"github.com/tiagokriok/gf/internal/history"
-	"github.com/tiagokriok/gf/internal/scanner"
-	"github.com/tiagokriok/gf/internal/ui"
+	"github.com/tiagokriok/Git-Fuzzy/internal/config"
+	"github.com/tiagokriok/Git-Fuzzy/internal/history"
+	"github.com/tiagokriok/Git-Fuzzy/internal/scanner"
+	"github.com/tiagokriok/Git-Fuzzy/internal/ui"
 )
 
 func main() {
