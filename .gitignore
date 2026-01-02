@@ -29,7 +29,7 @@ go.work
 # Build artifacts
 # Ignore only the gf binary executable in the project root
 # The exclamation marks below allow cmd/gf directory to be tracked
-!/cmd/gf
+!/cmd/gitf
 /gitf
 
 # Local development

@@ -50,7 +50,7 @@ sudo mv gitf /usr/local/bin/  # Optional: add to PATH
 gitf
 ```
 
-On first run, an interactive wizard creates `~/.config/gf/config.json`:
+On first run, an interactive wizard creates `~/.config/gitf/config.json`:
 
 ```json
 {
@@ -70,9 +70,9 @@ Customize by editing the configuration file directly or re-running the setup wiz
 
 ```bash
 make help              # Show all available commands
-make build             # Build the gf binary
+make build             # Build the gitf binary
 make build-optimized   # Build optimized binary (29% smaller)
-make run               # Run gf directly
+make run               # Run gitf directly
 make test              # Run all tests
 make test-verbose      # Run tests with verbose output
 make test-coverage     # Generate coverage report (opens HTML)
@@ -185,7 +185,7 @@ go mod download
 
 ## Configuration
 
-Configuration is stored in `~/.config/gf/config.json` and created automatically on first run.
+Configuration is stored in `~/.config/gitf/config.json` and created automatically on first run.
 
 ### Configuration Options
 
@@ -231,7 +231,6 @@ This intelligent filtering enables sub-second repository discovery even in large
 - **Intelligent Sorting**: Automatically reorder search results by most recent usage
 
 #### 🔧 Improvements
-- `.gitignore`: Fixed to properly ignore only `/gf` binary, not `cmd/gf` directory
 - Test Coverage: Now at 11 passing tests across config and scanner packages
 - Code Quality: Full `go fmt`, `go vet` compliance with error wrapping
 

@@ -37,7 +37,7 @@ func ConfigPath() (string, error) {
 		return "", fmt.Errorf("failed to get user config directory: %w", err)
 	}
 
-	return filepath.Join(configPath, "gf", "config.json"), nil
+	return filepath.Join(configPath, "gitf", "config.json"), nil
 }
 
 func Load() (*Config, error) {

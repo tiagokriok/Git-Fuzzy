@@ -53,7 +53,7 @@ func TestDefaultConfig(t *testing.T) {
 
 func TestConfigPath(t *testing.T) {
 	cfgPath, err := ConfigPath()
-	expectedCfg := "gf/config.json"
+	expectedCfg := "gitf/config.json"
 
 	if err != nil {
 		t.Fatalf("failed to get config path: %v", err)
@@ -97,7 +97,7 @@ func TestSave_CreatesDirectory(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	configFile := filepath.Join(tmpDir, ".config", "gf", "config.json")
+	configFile := filepath.Join(tmpDir, ".config", "gitf", "config.json")
 
 	err := save(configFile, cfg)
 

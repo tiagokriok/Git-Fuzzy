@@ -18,7 +18,7 @@ func RecentPath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get config dir: %w", err)
 	}
-	return filepath.Join(configDir, "gf", "recent.json"), nil
+	return filepath.Join(configDir, "gitf", "recent.json"), nil
 }
 
 func LoadRecent() (*Recent, error) {

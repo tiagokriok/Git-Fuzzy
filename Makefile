@@ -98,7 +98,7 @@ deps:
 reset-local:
 	@echo "🔄 Resetting local state..."
 	@rm -f $(BINARY_PATH)
-	@rm -rf ~/.config/gf/
+	@rm -rf ~/.config/gitf/
 	@echo "✅ Reset complete. Run 'make run' to start fresh"
 
 # Run all checks (fmt + lint + test)
