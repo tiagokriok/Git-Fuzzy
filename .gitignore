@@ -30,7 +30,7 @@ go.work
 # Ignore only the gf binary executable in the project root
 # The exclamation marks below allow cmd/gf directory to be tracked
 !/cmd/gf
-/gf
+/gitf
 
 # Local development
 .env
