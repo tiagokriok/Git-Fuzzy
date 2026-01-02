@@ -1,13 +1,13 @@
 #!/bin/bash
 
-# build-release.sh - Build gf binaries for multiple platforms
+# build-release.sh - Build gitf binaries for multiple platforms
 # Usage: ./build-release.sh [version]
 
 VERSION="${1:-0.1.0}"
 BUILD_DIR="dist"
 LDFLAGS="-s -w -X main.Version=${VERSION}"
 
-echo "🚀 Building GF v${VERSION} for multiple platforms..."
+echo "🚀 Building GitF v${VERSION} for multiple platforms..."
 mkdir -p "${BUILD_DIR}"
 
 # Array of platforms: (os/arch)
@@ -23,7 +23,7 @@ build_platform() {
     local platform=$1
     local os="${platform%%/*}"
     local arch="${platform##*/}"
-    local output="${BUILD_DIR}/gf-${os}-${arch}"
+    local output="${BUILD_DIR}/gitf-${os}-${arch}"
     
     if [ "$os" = "windows" ]; then
         output="${output}.exe"
@@ -53,7 +53,7 @@ done
 echo ""
 echo "📝 Generating checksums..."
 cd "${BUILD_DIR}"
-sha256sum gf-* > SHA256SUMS
+sha256sum gitf-* > SHA256SUMS
 echo "✅ Checksums written to SHA256SUMS"
 cd ..
 

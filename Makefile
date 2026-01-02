@@ -1,24 +1,24 @@
 .PHONY: help build run test test-verbose test-coverage fmt lint vet clean install
 
 # Variables
-BINARY_NAME=gf
+BINARY_NAME=gitf
 BINARY_PATH=./$(BINARY_NAME)
 VERSION?=0.1.0
 BUILD_FLAGS=-ldflags "-s -w"
 
 # Default target
 help:
-	@echo "🔧 GF (Git Fuzzy) - Makefile targets:"
+	@echo "🔧 GitF (Git Fuzzy) - Makefile targets:"
 	@echo ""
-	@echo "  build              Build the gf binary"
-	@echo "  run                Run gf directly (development)"
+	@echo "  build              Build the gitf binary"
+	@echo "  run                Run gitf directly (development)"
 	@echo "  test               Run all tests"
 	@echo "  test-verbose       Run tests with verbose output"
 	@echo "  test-coverage      Run tests with coverage report"
 	@echo "  fmt                Format code with gofmt"
 	@echo "  lint               Run go vet for linting"
 	@echo "  clean              Remove build artifacts and temp files"
-	@echo "  install            Install gf to \$$GOPATH/bin"
+	@echo "  install            Install gitf to \$$GOPATH/bin"
 	@echo "  help               Show this help message"
 	@echo ""
 
@@ -36,7 +36,7 @@ build-optimized:
 	@echo "✅ Optimized build complete: $(BINARY_PATH)"
 	@du -h $(BINARY_PATH)
 
-# Run gf directly
+# Run gitf directly
 run: build
 	@./$(BINARY_PATH)
 
@@ -108,4 +108,4 @@ check: fmt lint test
 # Development workflow
 dev: clean fmt lint test build
 	@echo "✅ Development build ready!"
-	@echo "Run './gf' to test"
+	@echo "Run './gitf' to test"

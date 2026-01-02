@@ -19,7 +19,7 @@ A high-performance CLI tool for discovering and opening Git repositories with in
 
 ```bash
 go install github.com/tiagokriok/Git-Fuzzy/cmd/gf@latest
-gf
+gitf
 ```
 
 This installs the latest version directly to `$GOPATH/bin`. Works on Linux, macOS, and Windows.
@@ -40,8 +40,8 @@ make install        # Install to $GOPATH/bin
 ```bash
 git clone https://github.com/tiagokriok/Git-Fuzzy.git
 cd Git-Fuzzy
-go build -o gf ./cmd/gf
-sudo mv gf /usr/local/bin/  # Optional: add to PATH
+go build -o gitf ./cmd/gf
+sudo mv gitf /usr/local/bin/  # Optional: add to PATH
 ```
 
 ### Basic Usage
