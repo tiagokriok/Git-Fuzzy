@@ -33,7 +33,7 @@ build_platform() {
     GOOS="${os}" GOARCH="${arch}" go build \
         -ldflags "${LDFLAGS}" \
         -o "${output}" \
-        ./cmd/gf
+        ./cmd/gitf
     
     if [ $? -eq 0 ]; then
         local size=$(du -h "${output}" | cut -f1)
