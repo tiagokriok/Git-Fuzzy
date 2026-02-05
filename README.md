@@ -5,9 +5,13 @@ A high-performance CLI tool for discovering and opening Git repositories with in
 ## Key Features
 
 - **Real-time Fuzzy Search**: Instant repository filtering with substring matching
-- **Interactive TUI**: Responsive terminal UI using The Elm Architecture (Bubbletea)
+- **Split-View TUI**: Responsive terminal UI with repository list and live git status panel
+- **Live Git Status**: Real-time branch info, ahead/behind counts, and file-level changes
 - **Intelligent Scanning**: Recursive filesystem traversal with automatic exclusion of non-essential directories
 - **Editor Integration**: Seamless handoff to configured editor (Neovim, VS Code, Vim, etc.)
+- **Quick Actions**: Open file manager, terminal, or browser from any repository
+- **Recent Repositories**: Track and prioritize last 10 opened repositories
+- **Cross-Platform**: Linux, macOS, and Windows support with auto-detected terminals/file managers
 - **Zero-Configuration Setup**: Interactive wizard creates sensible defaults on first run
 - **Performance Optimized**: Efficient directory traversal with early termination and deduplication
 
@@ -221,57 +225,61 @@ make dev               # Full development workflow (clean, fmt, lint, test, buil
 
 ## Keyboard Shortcuts
 
-### Main View
+### Navigation
 
 - `↑` / `↓` or `Tab` / `Shift+Tab`: Navigate repositories
+- `Shift+↑` / `Shift+↓`: Scroll git status file list
 - `Type`: Filter by repository name (fuzzy search)
 - `Backspace`: Delete character from search
+
+### Actions
+
 - `Enter`: Open selected repository in editor
 - `Ctrl+O`: Open file manager at repository location
 - `Ctrl+T`: Open terminal in repository directory
 - `Ctrl+B`: Open remote repository in browser (GitHub/GitLab)
-- `Ctrl+G`: Show git status in modal overlay
+- `Ctrl+G`: Force refresh git status
 - `Esc` / `Ctrl+C`: Exit application
-
-### Git Status Modal
-
-- `↑` / `↓` or `j` / `k`: Scroll through git status
-- `Esc` or `q`: Close modal and return to main view
 
 ## Technical Architecture
 
 ### Project Structure
 
 ```
-gf/
+gitf/
 ├── cmd/gitf/
-│   └── main.go                      # Application entry point & editor integration
+│   ├── main.go                      # Entry point, Cobra CLI & editor integration
+│   ├── process_unix.go              # Unix process detachment (Setsid)
+│   └── process_windows.go          # Windows process detachment (CREATE_NEW_PROCESS_GROUP)
 ├── internal/
 │   ├── config/
 │   │   ├── config.go                # Configuration management (load/save/defaults)
-│   │   └── config_test.go           # Unit tests (62.9% coverage)
+│   │   └── config_test.go           # Unit tests
+│   ├── git/
+│   │   └── operations.go           # Git status, remote URL parsing, SSH-to-HTTPS conversion
 │   ├── history/
 │   │   └── recent.go                # Recent repositories tracking & persistence
+│   ├── platform/
+│   │   └── platform.go             # Cross-platform detection (terminal, file manager, browser)
 │   ├── scanner/
 │   │   ├── scanner.go               # Repository discovery with optimized traversal
-│   │   │                             # Includes ReorderByRecent() for intelligent sorting
-│   │   └── scanner_test.go          # Unit tests (60.0% coverage)
+│   │   └── scanner_test.go          # Unit tests
 │   └── ui/
-│       ├── ui.go                    # Interactive TUI & result rendering
+│       ├── ui.go                    # Split-view TUI with live git status
 │       └── setup.go                 # Setup wizard for first-run configuration
 ├── Makefile                         # Development workflow automation
-├── .gitignore                       # Git ignore patterns
 ├── go.mod
 └── go.sum
 ```
 
 ### Design Patterns
 
-- **Separation of Concerns**: Modular architecture with config, scanner, and UI packages
+- **Separation of Concerns**: Modular architecture with config, scanner, git, platform, history, and UI packages
 - **The Elm Architecture**: TUI implementation using Bubbletea for predictable state management
+- **Async Git Status**: Background fetching with 200ms debounce prevents command spam
+- **Platform Abstraction**: OS-specific code isolated in dedicated build files
 - **Efficient Traversal**: `filepath.Walk()` with early `SkipDir` for large directory trees
 - **Deduplication**: Map-based tracking prevents duplicate repository entries
-- **Error Handling**: Comprehensive error wrapping with context using `fmt.Errorf("%w")`
 
 ## Development
 
@@ -318,11 +326,13 @@ go mod download
 
 ### Core Dependencies
 
-| Package | Purpose | Version |
-|---------|---------|---------|
-| [charmbracelet/bubbletea](https://github.com/charmbracelet/bubbletea) | TUI framework implementing Elm Architecture | Latest |
-| [charmbracelet/lipgloss](https://github.com/charmbracelet/lipgloss) | Terminal styling and layout | Latest |
-| [sahilm/fuzzy](https://github.com/sahilm/fuzzy) | Efficient fuzzy string matching | Latest |
+| Package | Purpose |
+|---------|---------|
+| [charmbracelet/bubbletea](https://github.com/charmbracelet/bubbletea) | TUI framework (Elm Architecture) |
+| [charmbracelet/bubbles](https://github.com/charmbracelet/bubbles) | Reusable TUI components |
+| [charmbracelet/lipgloss](https://github.com/charmbracelet/lipgloss) | Terminal styling and layout |
+| [sahilm/fuzzy](https://github.com/sahilm/fuzzy) | Fuzzy string matching |
+| [spf13/cobra](https://github.com/spf13/cobra) | CLI framework and flag parsing |
 
 ### Go Version
 - **Go 1.25.5** or higher required
@@ -331,12 +341,22 @@ go mod download
 
 Configuration is stored in `~/.config/gitf/config.json` (Linux/macOS) or `%APPDATA%\gitf\config.json` (Windows) and created automatically on first run via the setup wizard.
 
+### CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--setup` / `-s` | Force run configuration wizard |
+| `--version` / `-v` | Display version information |
+| `--help` / `-h` | Show help message |
+
 ### Configuration Options
 
 | Option | Type | Description | Example |
 |--------|------|-------------|---------|
-| `editor` | string | Command to launch when opening repository | `"nvim"`, `"code"`, `"vim"`, `"code.exe"` (Windows) |
-| `search_paths` | array | Directories to recursively scan for Git repos | `["/home/user/dev", "/work"]` or `["C:\\\\Users\\\\user\\\\dev"]` |
+| `editor` | string | Command to launch when opening repository | `"nvim"`, `"code"`, `"vim"` |
+| `search_paths` | array | Directories to recursively scan for Git repos | `["/home/user/dev", "/work"]` |
+| `file_manager` | string | File manager command (auto-detected if omitted) | `"nautilus"`, `"dolphin"` |
+| `terminal` | string | Terminal emulator (auto-detected if omitted) | `"ghostty"`, `"alacritty"` |
 
 ### Configuration File Locations
 
@@ -378,23 +398,17 @@ This intelligent filtering enables sub-second repository discovery even in large
 
 ## Recent Updates
 
-### Version 0.1.0
+See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
-#### ✨ New Features
-- **Makefile**: Complete development workflow automation with 15+ targets
-- **Binary Optimization**: Build-time flag optimization reduces binary size by 29% (5.1M → 3.6M)
-- **Recent Repositories**: Track and prioritize last 10 opened repositories
-- **Intelligent Sorting**: Automatically reorder search results by most recent usage
+### Latest (v0.3.5)
 
-#### 🔧 Improvements
-- Test Coverage: Now at 11 passing tests across config and scanner packages
-- Code Quality: Full `go fmt`, `go vet` compliance with error wrapping
-
-#### 📊 Project Stats
-- **Lines of Code**: ~990 (production: 700, tests: 290)
-- **Binary Size**: 5.1M (standard), 3.6M (optimized)
-- **Test Pass Rate**: 100% (11/11 tests passing)
-- **Supported Go Version**: 1.25.5+
+- Split-view TUI with live git status panel
+- Quick actions: file manager, terminal, browser integration
+- Cross-platform terminal/file manager auto-detection (15+ terminal emulators)
+- Process detachment for floating window managers (Hyprland, etc.)
+- SSH-to-HTTPS URL conversion for browser opening
+- Path truncation for long filenames in git status
+- Cobra CLI with `--setup` and `--version` flags
 
 ## License
 
