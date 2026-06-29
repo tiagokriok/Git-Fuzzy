@@ -155,6 +155,63 @@ func TestLoadSave_RoundTrip(t *testing.T) {
 
 }
 
+func TestDefaultConfig_TmuxDefaultOpenAction(t *testing.T) {
+	cfg, err := DefaultConfig()
+	assertNoError(t, err)
+
+	assertEqual(t, TmuxOpenEditor, cfg.GetTmuxDefaultOpenAction(), "tmux default open action")
+}
+
+func TestLoad_MissingTmuxDefaultOpenActionDefaultsToEditor(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "config.json")
+
+	jsonData := []byte(`{
+		"editor": "nvim",
+		"search_paths": ["/home/user/dev"]
+	}`)
+	assertNoError(t, os.WriteFile(configFile, jsonData, 0644))
+
+	cfg, err := load(configFile)
+	assertNoError(t, err)
+
+	assertEqual(t, TmuxOpenEditor, cfg.GetTmuxDefaultOpenAction(), "missing tmux default open action")
+}
+
+func TestLoad_InvalidTmuxDefaultOpenActionDefaultsToEditor(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "config.json")
+
+	jsonData := []byte(`{
+		"editor": "nvim",
+		"search_paths": ["/home/user/dev"],
+		"tmux_default_open_action": "bad-action"
+	}`)
+	assertNoError(t, os.WriteFile(configFile, jsonData, 0644))
+
+	cfg, err := load(configFile)
+	assertNoError(t, err)
+
+	assertEqual(t, TmuxOpenEditor, cfg.GetTmuxDefaultOpenAction(), "invalid tmux default open action")
+}
+
+func TestLoad_ValidTmuxDefaultOpenActionPreserved(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "config.json")
+
+	jsonData := []byte(`{
+		"editor": "nvim",
+		"search_paths": ["/home/user/dev"],
+		"tmux_default_open_action": "tmux-window"
+	}`)
+	assertNoError(t, os.WriteFile(configFile, jsonData, 0644))
+
+	cfg, err := load(configFile)
+	assertNoError(t, err)
+
+	assertEqual(t, TmuxOpenWindow, cfg.GetTmuxDefaultOpenAction(), "valid tmux default open action")
+}
+
 func TestLoad_InvalidJSON(t *testing.T) {
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "config.json")

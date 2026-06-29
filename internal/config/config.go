@@ -9,11 +9,22 @@ import (
 	"github.com/tiagokriok/Git-Fuzzy/internal/platform"
 )
 
+type TmuxOpenAction string
+
+const (
+	TmuxOpenEditor         TmuxOpenAction = "editor"
+	TmuxOpenWindow         TmuxOpenAction = "tmux-window"
+	TmuxOpenVerticalPane   TmuxOpenAction = "tmux-vertical-pane"
+	TmuxOpenHorizontalPane TmuxOpenAction = "tmux-horizontal-pane"
+	TmuxOpenSession        TmuxOpenAction = "tmux-session"
+)
+
 type Config struct {
-	Editor      string   `json:"editor"`
-	SearchPaths []string `json:"search_paths"`
-	FileManager string   `json:"file_manager,omitempty"`
-	Terminal    string   `json:"terminal,omitempty"`
+	Editor                string   `json:"editor"`
+	SearchPaths           []string `json:"search_paths"`
+	FileManager           string   `json:"file_manager,omitempty"`
+	Terminal              string   `json:"terminal,omitempty"`
+	TmuxDefaultOpenAction string   `json:"tmux_default_open_action,omitempty"`
 }
 
 func DefaultConfig() (*Config, error) {
@@ -31,8 +42,9 @@ func defaultConfig() (*Config, error) {
 		Editor: "nvim",
 		SearchPaths: []string{
 			filepath.Join(homeDir, "dev"), filepath.Join(homeDir, "projects"), filepath.Join(homeDir, "repos"), filepath.Join(homeDir, "workspaces")},
-		FileManager: platform.DetectFileManager(),
-		Terminal:    platform.DetectTerminal(),
+		FileManager:           platform.DetectFileManager(),
+		Terminal:              platform.DetectTerminal(),
+		TmuxDefaultOpenAction: string(TmuxOpenEditor),
 	}, nil
 }
 
@@ -67,6 +79,8 @@ func load(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
+	config.TmuxDefaultOpenAction = string(config.GetTmuxDefaultOpenAction())
+
 	return &config, nil
 }
 
@@ -96,6 +110,35 @@ func save(configPath string, cfg *Config) error {
 	}
 
 	return nil
+}
+
+// GetTmuxDefaultOpenAction returns the normalized tmux default open action.
+func (c *Config) GetTmuxDefaultOpenAction() TmuxOpenAction {
+	if c == nil {
+		return TmuxOpenEditor
+	}
+	return NormalizeTmuxOpenAction(c.TmuxDefaultOpenAction)
+}
+
+// TmuxOpenActionOptions returns all valid tmux open actions.
+func TmuxOpenActionOptions() []TmuxOpenAction {
+	return []TmuxOpenAction{
+		TmuxOpenEditor,
+		TmuxOpenWindow,
+		TmuxOpenVerticalPane,
+		TmuxOpenHorizontalPane,
+		TmuxOpenSession,
+	}
+}
+
+// NormalizeTmuxOpenAction normalizes an action string to a valid TmuxOpenAction.
+func NormalizeTmuxOpenAction(action string) TmuxOpenAction {
+	switch TmuxOpenAction(action) {
+	case TmuxOpenEditor, TmuxOpenWindow, TmuxOpenVerticalPane, TmuxOpenHorizontalPane, TmuxOpenSession:
+		return TmuxOpenAction(action)
+	default:
+		return TmuxOpenEditor
+	}
 }
 
 // GetFileManager returns configured file manager or auto-detects if empty

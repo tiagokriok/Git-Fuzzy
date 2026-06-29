@@ -10,6 +10,7 @@ A high-performance CLI tool for discovering and opening Git repositories with in
 - **Intelligent Scanning**: Recursive filesystem traversal with automatic exclusion of non-essential directories
 - **Editor Integration**: Seamless handoff to configured editor (Neovim, VS Code, Vim, etc.)
 - **Quick Actions**: Open file manager, terminal, or browser from any repository
+- **Tmux Actions**: Open selected repositories in tmux windows, panes, or named sessions when running inside tmux
 - **Recent Repositories**: Track and prioritize last 10 opened repositories
 - **Cross-Platform**: Linux, macOS, and Windows support with auto-detected terminals/file managers
 - **Zero-Configuration Setup**: Interactive wizard creates sensible defaults on first run
@@ -145,7 +146,8 @@ notepad $env:APPDATA\gitf\config.json
     "/home/user/projects",
     "/home/user/work",
     "/opt/repositories"
-  ]
+  ],
+  "tmux_default_open_action": "editor"
 }
 ```
 
@@ -187,6 +189,8 @@ Or using backslash escaping in JSON:
 }
 ```
 
+`tmux_default_open_action` controls what `Enter` does while `gitf` is running inside tmux. Supported values are `editor`, `tmux-window`, `tmux-vertical-pane`, `tmux-horizontal-pane`, and `tmux-session`.
+
 ### Basic Usage
 
 After configuration, simply run:
@@ -202,6 +206,29 @@ GF will:
 4. Open your selection in the configured editor
 
 **Note**: GF intelligently skips common directories like `node_modules`, `vendor`, `.git`, and virtual environments to ensure fast scanning even in large codebases.
+
+### Tmux Actions
+
+When `gitf` runs inside tmux, it can open the selected repository directly in tmux targets.
+
+Shortcuts:
+
+```text
+Alt+w  Open in a new tmux window
+Alt+v  Open in a vertical pane, side by side
+Alt+h  Open in a horizontal pane, top/bottom
+Alt+s  Prompt for a new tmux session name and switch to it
+```
+
+Tmux actions open the default tmux shell in the selected repository directory. They do not run the configured editor.
+
+`Enter` keeps the normal editor behavior outside tmux. Inside tmux, `Enter` uses `tmux_default_open_action` from the config. Existing configs default to `editor`.
+
+Example tmux popup binding:
+
+```tmux
+bind -r g display-popup -d '#{pane_current_path}' -w80% -h80% -E "zsh -ic 'exec gitf'"
+```
 
 ### Makefile Commands
 
