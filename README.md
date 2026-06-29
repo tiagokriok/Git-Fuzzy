@@ -230,6 +230,66 @@ Example tmux popup binding:
 bind -r g display-popup -d '#{pane_current_path}' -w80% -h80% -E "zsh -ic 'exec gitf'"
 ```
 
+### Theme Integration
+
+`gitf` can follow your Omarchy theme automatically. Existing configs default to automatic theme detection:
+
+```json
+{
+  "theme": {
+    "mode": "auto"
+  }
+}
+```
+
+Supported modes:
+
+```text
+auto      Use Omarchy when available, otherwise use the built-in theme
+default   Always use the built-in theme
+omarchy   Require Omarchy colors, falling back to default with a warning if unavailable
+file      Load a manual theme file from theme.path
+```
+
+Manual theme example:
+
+```json
+{
+  "theme": {
+    "mode": "file",
+    "path": "~/.config/gitf/my-theme.json"
+  }
+}
+```
+
+Manual theme files can use a flat palette:
+
+```json
+{
+  "accent": "#7aa2f7",
+  "foreground": "#a9b1d6",
+  "success": "#9ece6a"
+}
+```
+
+Only `#RRGGBB` colors are accepted. Missing colors use built-in defaults.
+
+#### Omarchy hook
+
+Sync the current Omarchy theme into the `gitf` cache:
+
+```bash
+gitf theme sync-omarchy
+```
+
+To sync whenever Omarchy changes theme, add this to `~/.config/omarchy/hooks/theme-set`:
+
+```bash
+gitf theme sync-omarchy >/dev/null
+```
+
+`gitf` also checks for theme changes while open and refreshes within 2 seconds.
+
 ### Makefile Commands
 
 ```bash

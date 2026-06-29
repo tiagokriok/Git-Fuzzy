@@ -7,8 +7,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/tiagokriok/Git-Fuzzy/internal/config"
+	"github.com/tiagokriok/Git-Fuzzy/internal/theme"
 )
 
 type SetupModel struct {
@@ -19,9 +19,13 @@ type SetupModel struct {
 	tmuxDefaultActions []config.TmuxOpenAction
 	completed          *config.Config
 	err                error
+	theme              theme.Theme
+	themeWarning       *theme.Warning
+	styles             Styles
+	themeConfig        config.ThemeConfig
 }
 
-func RunSetup() (*config.Config, error) {
+func newSetupModel(appTheme theme.Theme, warning *theme.Warning, themeConfig config.ThemeConfig) SetupModel {
 	editorInput := textinput.New()
 	editorInput.Placeholder = "e.g., vim, nvim, code, zed"
 	editorInput.SetValue("nvim")
@@ -32,12 +36,20 @@ func RunSetup() (*config.Config, error) {
 	pathsInput.Placeholder = "e.g., ~/dev, ~/projects"
 	pathsInput.SetValue(defaultPaths)
 
-	model := SetupModel{
+	return SetupModel{
 		step:               0,
 		editor:             editorInput,
 		paths:              pathsInput,
 		tmuxDefaultActions: config.TmuxOpenActionOptions(),
+		theme:              appTheme,
+		themeWarning:       warning,
+		styles:             NewStyles(appTheme),
+		themeConfig:        themeConfig,
 	}
+}
+
+func RunSetup(appTheme theme.Theme, warning *theme.Warning, themeConfig config.ThemeConfig) (*config.Config, error) {
+	model := newSetupModel(appTheme, warning, themeConfig)
 
 	p := tea.NewProgram(model)
 	finalModel, err := p.Run()
@@ -54,11 +66,18 @@ func RunSetup() (*config.Config, error) {
 }
 
 func (m SetupModel) Init() tea.Cmd {
-	return nil
+	return scheduleThemeRefresh(m.themeConfig)
 }
 
 func (m SetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case themeRefreshMsg:
+		if msg.theme != m.theme {
+			m.theme = msg.theme
+			m.styles = NewStyles(msg.theme)
+		}
+		m.themeWarning = msg.warning
+		return m, scheduleThemeRefresh(m.themeConfig)
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "esc":
@@ -163,61 +182,51 @@ func (m SetupModel) View() string {
 }
 
 func (m SetupModel) editorView() string {
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	title := m.styles.Title.Render("🎯 Git Fuzzy Setup")
+	subtitle := m.styles.Subtitle.Render("Step 1 of 3: Editor")
+	input := m.styles.SearchBox.Width(50).Render(m.editor.View())
+	footer := m.styles.FooterPadded.Render("Enter: next | Ctrl+C: cancel")
 
-	title := headerStyle.Render("🎯 Git Fuzzy Setup")
-	subtitle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("Step 1 of 3: Editor")
-
-	inputStyle := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240")).Padding(0, 1).Width(50)
-
-	input := inputStyle.Render(m.editor.View())
-
-	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Padding(1, 0)
-
-	footer := footerStyle.Render("Enter: next | Ctrl+C: cancel")
-
+	warning := themeWarningText(m.themeWarning)
+	if warning != "" {
+		return fmt.Sprintf("%s\n\n%s\n\n%s\n\nWhat's your preferred editor?\n%s\n\n%s", title, subtitle, m.styles.Error.Render(warning), input, footer)
+	}
 	return fmt.Sprintf("%s\n\n%s\n\nWhat's your preferred editor?\n%s\n\n%s", title, subtitle, input, footer)
 }
 
 func (m SetupModel) pathsView() string {
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	title := m.styles.Title.Render("🎯 Git Fuzzy Setup")
+	subtitle := m.styles.Subtitle.Render("Step 2 of 3: Search Paths")
+	input := m.styles.SearchBox.Width(50).Render(m.paths.View())
+	footer := m.styles.FooterPadded.Render("Enter: save | Shift+Tab: back | Ctrl+C: cancel")
 
-	title := headerStyle.Render("🎯 Git Fuzzy Setup")
-	subtitle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("Step 2 of 3: Search Paths")
-
-	inputStyle := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240")).Padding(0, 1).Width(50)
-
-	input := inputStyle.Render(m.paths.View())
-
-	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Padding(1, 0)
-
-	footer := footerStyle.Render("Enter: save | Shift+Tab: back | Ctrl+C: cancel")
-
+	if warning := themeWarningText(m.themeWarning); warning != "" {
+		return fmt.Sprintf("%s\n%s\n\n%s\n\nEnter directories (comma-separated):\n%s\n\n%s", title, subtitle, m.styles.Error.Render(warning), input, footer)
+	}
 	return fmt.Sprintf("%s\n%s\n\nEnter directories (comma-separated):\n%s\n\n%s", title, subtitle, input, footer)
 }
 
 func (m SetupModel) tmuxActionView() string {
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	selectedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("46")).Bold(true)
-	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-
-	title := headerStyle.Render("🎯 Git Fuzzy Setup")
-	subtitle := mutedStyle.Render("Step 3 of 3: Tmux Enter Action")
+	title := m.styles.Title.Render("🎯 Git Fuzzy Setup")
+	subtitle := m.styles.Subtitle.Render("Step 3 of 3: Tmux Enter Action")
 
 	var lines []string
 	for i, action := range m.tmuxDefaultActions {
 		label := tmuxActionLabel(action)
 		if i == m.tmuxActionIdx {
-			lines = append(lines, selectedStyle.Render("▶ "+label))
+			lines = append(lines, m.styles.Selected.Render("▶ "+label))
 		} else {
 			lines = append(lines, "  "+label)
 		}
 	}
 
-	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Padding(1, 0)
-	footer := footerStyle.Render("↑/↓: choose | Enter: save | Shift+Tab: back | Ctrl+C: cancel")
+	footer := m.styles.FooterPadded.Render("↑/↓: choose | Enter: save | Shift+Tab: back | Ctrl+C: cancel")
 
-	return fmt.Sprintf("%s\n%s\n\nDefault action for Enter while inside tmux:\n%s\n\n%s", title, subtitle, strings.Join(lines, "\n"), footer)
+	body := fmt.Sprintf("Default action for Enter while inside tmux:\n%s", strings.Join(lines, "\n"))
+	if warning := themeWarningText(m.themeWarning); warning != "" {
+		return fmt.Sprintf("%s\n%s\n\n%s\n\n%s\n\n%s", title, subtitle, m.styles.Error.Render(warning), body, footer)
+	}
+	return fmt.Sprintf("%s\n%s\n\n%s\n\n%s", title, subtitle, body, footer)
 }
 
 func tmuxActionLabel(action config.TmuxOpenAction) string {

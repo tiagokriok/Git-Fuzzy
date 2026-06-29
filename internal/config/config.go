@@ -19,12 +19,27 @@ const (
 	TmuxOpenSession        TmuxOpenAction = "tmux-session"
 )
 
+type ThemeMode string
+
+const (
+	ThemeModeAuto    ThemeMode = "auto"
+	ThemeModeDefault ThemeMode = "default"
+	ThemeModeOmarchy ThemeMode = "omarchy"
+	ThemeModeFile    ThemeMode = "file"
+)
+
+type ThemeConfig struct {
+	Mode string `json:"mode,omitempty"`
+	Path string `json:"path,omitempty"`
+}
+
 type Config struct {
-	Editor                string   `json:"editor"`
-	SearchPaths           []string `json:"search_paths"`
-	FileManager           string   `json:"file_manager,omitempty"`
-	Terminal              string   `json:"terminal,omitempty"`
-	TmuxDefaultOpenAction string   `json:"tmux_default_open_action,omitempty"`
+	Editor                string      `json:"editor"`
+	SearchPaths           []string    `json:"search_paths"`
+	FileManager           string      `json:"file_manager,omitempty"`
+	Terminal              string      `json:"terminal,omitempty"`
+	TmuxDefaultOpenAction string      `json:"tmux_default_open_action,omitempty"`
+	Theme                 ThemeConfig `json:"theme,omitempty"`
 }
 
 func DefaultConfig() (*Config, error) {
@@ -45,6 +60,7 @@ func defaultConfig() (*Config, error) {
 		FileManager:           platform.DetectFileManager(),
 		Terminal:              platform.DetectTerminal(),
 		TmuxDefaultOpenAction: string(TmuxOpenEditor),
+		Theme:                 ThemeConfig{Mode: string(ThemeModeAuto)},
 	}, nil
 }
 
@@ -80,6 +96,7 @@ func load(configPath string) (*Config, error) {
 	}
 
 	config.TmuxDefaultOpenAction = string(config.GetTmuxDefaultOpenAction())
+	config.Theme = config.GetThemeConfig()
 
 	return &config, nil
 }
@@ -94,6 +111,8 @@ func (c *Config) Save() error {
 }
 
 func save(configPath string, cfg *Config) error {
+	cfg.Theme = cfg.GetThemeConfig()
+	cfg.TmuxDefaultOpenAction = string(cfg.GetTmuxDefaultOpenAction())
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
@@ -110,6 +129,25 @@ func save(configPath string, cfg *Config) error {
 	}
 
 	return nil
+}
+
+func NormalizeThemeMode(mode string) ThemeMode {
+	switch ThemeMode(mode) {
+	case ThemeModeAuto, ThemeModeDefault, ThemeModeOmarchy, ThemeModeFile:
+		return ThemeMode(mode)
+	default:
+		return ThemeModeAuto
+	}
+}
+
+func (c *Config) GetThemeConfig() ThemeConfig {
+	if c == nil {
+		return ThemeConfig{Mode: string(ThemeModeAuto)}
+	}
+	return ThemeConfig{
+		Mode: string(NormalizeThemeMode(c.Theme.Mode)),
+		Path: c.Theme.Path,
+	}
 }
 
 // GetTmuxDefaultOpenAction returns the normalized tmux default open action.

@@ -3,15 +3,18 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"github.com/tiagokriok/Git-Fuzzy/internal/config"
 	"github.com/tiagokriok/Git-Fuzzy/internal/history"
 	"github.com/tiagokriok/Git-Fuzzy/internal/scanner"
+	"github.com/tiagokriok/Git-Fuzzy/internal/theme"
 	"github.com/tiagokriok/Git-Fuzzy/internal/ui"
 )
 
@@ -61,6 +64,20 @@ automatically in your preferred editor.`,
 	// Custom version template for cleaner output
 	rootCmd.SetVersionTemplate(`{{.Version}}` + "\n")
 
+	themeCmd := &cobra.Command{
+		Use:   "theme",
+		Short: "Theme utilities",
+	}
+	syncOmarchyCmd := &cobra.Command{
+		Use:   "sync-omarchy",
+		Short: "Sync the current Omarchy theme into gitf cache",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runThemeSyncOmarchy(cmd.OutOrStdout(), cmd.ErrOrStderr(), theme.SyncOmarchy)
+		},
+	}
+	themeCmd.AddCommand(syncOmarchyCmd)
+	rootCmd.AddCommand(themeCmd)
+
 	// Execute
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -71,7 +88,9 @@ func runTUI(cmd *cobra.Command, args []string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			cfg, err = ui.RunSetup()
+			setupThemeCfg := config.ThemeConfig{Mode: string(config.ThemeModeAuto)}
+			setupTheme, setupWarning := theme.Load(setupThemeCfg)
+			cfg, err = ui.RunSetup(setupTheme, setupWarning, setupThemeCfg)
 			if err != nil {
 				return fmt.Errorf("setup failed: %w", err)
 			}
@@ -82,6 +101,8 @@ func runTUI(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to load config: %w", err)
 		}
 	}
+
+	appTheme, themeWarning := theme.Load(cfg.GetThemeConfig())
 
 	repos, err := scanner.Scan(cfg.SearchPaths)
 	if err != nil {
@@ -97,7 +118,7 @@ func runTUI(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no repositories found in search paths")
 	}
 
-	selected, err := ui.Run(repos, cfg)
+	selected, err := ui.Run(repos, cfg, appTheme, themeWarning)
 	if err != nil {
 		return fmt.Errorf("failed to run UI: %w", err)
 	}
@@ -125,24 +146,57 @@ func handleSetup(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
+	var themeConfig config.ThemeConfig
 	if cfg != nil {
-		fmt.Println("\nCurrent configuration:")
-		fmt.Printf("  Editor: %s\n", cfg.Editor)
-		fmt.Printf("  Search Paths: %s\n\n", strings.Join(cfg.SearchPaths, ", "))
-		fmt.Println("Press Enter to setup or Ctrl+C to cancel...")
+		themeConfig = cfg.GetThemeConfig()
+	} else {
+		themeConfig = config.ThemeConfig{Mode: string(config.ThemeModeAuto)}
+	}
+
+	setupTheme, themeWarning := theme.Load(themeConfig)
+	styles := ui.NewStyles(setupTheme)
+
+	if cfg != nil {
+		fmt.Println()
+		fmt.Println(styles.Title.Render("Current configuration:"))
+		fmt.Println(styles.Muted.Render(fmt.Sprintf("  Editor: %s", cfg.Editor)))
+		fmt.Println(styles.Muted.Render(fmt.Sprintf("  Search Paths: %s", strings.Join(cfg.SearchPaths, ", "))))
+		if themeWarning != nil {
+			fmt.Println()
+			fmt.Println(styles.Error.Render("Warning: " + themeWarning.Message))
+		}
+		fmt.Println()
+		fmt.Println(styles.Muted.Render("Press Enter to setup or Ctrl+C to cancel..."))
 		fmt.Scanln()
 	}
 
-	newCfg, err := ui.RunSetup()
+	newCfg, err := ui.RunSetup(setupTheme, themeWarning, themeConfig)
 	if err != nil {
 		return fmt.Errorf("setup cancelled: %w", err)
 	}
+
+	newCfg.Theme = themeConfig
 
 	if err := newCfg.Save(); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
 
-	fmt.Println("\n✓ Configuration saved successfully!")
+	fmt.Println(lipgloss.NewStyle().Foreground(styles.Success).Render("\n✓ Configuration saved successfully!"))
+	return nil
+}
+
+func runThemeSyncOmarchy(stdout io.Writer, stderr io.Writer, syncFn func() (theme.Cache, error)) error {
+	cache, err := syncFn()
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to sync Omarchy theme: %v\n", err)
+		return err
+	}
+	cachePath, pathErr := theme.CachePath()
+	if pathErr != nil {
+		fmt.Fprintf(stdout, "Synced Omarchy theme %q\n", cache.Name)
+		return nil
+	}
+	fmt.Fprintf(stdout, "Synced Omarchy theme %q to %s\n", cache.Name, cachePath)
 	return nil
 }
 
