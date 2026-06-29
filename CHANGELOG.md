@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-06-29
+
+### Added
+
+- Omarchy theme integration with automatic theme detection.
+- Theme config modes: `auto`, `default`, `omarchy`, and `file`.
+- `gitf theme sync-omarchy` command to generate `~/.config/gitf/theme.json`.
+- Semantic UI styling that follows Omarchy colors in the main TUI and setup wizard.
+- Live theme refresh while the TUI is open.
+- Manual theme file support with partial palette fallback.
+
 ## [0.4.0] - 2026-06-29
 
 ### Added
