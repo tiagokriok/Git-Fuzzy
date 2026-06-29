@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,6 +15,7 @@ import (
 	"github.com/tiagokriok/Git-Fuzzy/internal/git"
 	"github.com/tiagokriok/Git-Fuzzy/internal/platform"
 	"github.com/tiagokriok/Git-Fuzzy/internal/scanner"
+	"github.com/tiagokriok/Git-Fuzzy/internal/tmux"
 )
 
 var selectedRepository *scanner.Repository
@@ -24,6 +26,13 @@ const (
 	searchBoxHeight = 3
 	footerHeight    = 3
 	searchBoxWidth  = 50
+)
+
+type uiMode int
+
+const (
+	modeRepositoryList uiMode = iota
+	modeSessionPrompt
 )
 
 // Message types for async operations
@@ -38,19 +47,23 @@ type debounceTickMsg struct {
 }
 
 type Model struct {
-	repositories     []scanner.Repository
-	filtered         []scanner.Repository
-	searchInput      string
-	selectedIdx      int
-	scrollOffset     int
-	width            int
-	height           int
-	err              error
-	gitStatusData    *git.StatusData
-	gitStatusScroll  int
-	gitStatusLoading bool
-	gitStatusError   error
-	config           *config.Config
+	repositories       []scanner.Repository
+	filtered           []scanner.Repository
+	searchInput        string
+	selectedIdx        int
+	scrollOffset       int
+	width              int
+	height             int
+	err                error
+	gitStatusData      *git.StatusData
+	gitStatusScroll    int
+	gitStatusLoading   bool
+	gitStatusError     error
+	config             *config.Config
+	mode               uiMode
+	statusMessage      string
+	sessionNameInput   string
+	sessionPromptError string
 }
 
 func NewModel(repos []scanner.Repository, cfg *config.Config) Model {
@@ -59,6 +72,7 @@ func NewModel(repos []scanner.Repository, cfg *config.Config) Model {
 		filtered:     repos,
 		selectedIdx:  0,
 		config:       cfg,
+		mode:         modeRepositoryList,
 	}
 }
 
@@ -103,6 +117,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
+	if m.mode == modeSessionPrompt {
+		return m.renderSessionPrompt()
+	}
+
 	// Calculate panel widths (60/40 split)
 	// Each panel has: border (2) + padding (2) = 4 extra chars
 	// We need to account for this "chrome" when calculating content widths
@@ -428,8 +446,42 @@ func (m Model) renderFilesSection(data *git.StatusData, width int) string {
 
 func (m Model) renderFooter() string {
 	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Align(lipgloss.Center)
-	footer := footerStyle.Render("↑/↓: nav repos | Shift+↑/↓: scroll status | Enter: open | ^O: files | ^T: term | ^B: remote | ^G: refresh | Esc: exit")
-	return footer
+	footerText := "↑/↓: nav repos | Shift+↑/↓: scroll status | Enter: open | Alt+w/v/h/s: tmux | ^O: files | ^T: term | ^B: remote | ^G: refresh | Esc: exit"
+	if m.statusMessage != "" {
+		footerText = m.statusMessage + " | " + footerText
+	}
+	return footerStyle.Render(footerText)
+}
+
+func (m Model) renderSessionPrompt() string {
+	boxWidth := min(max(m.width-8, 40), 80)
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	inputStyle := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240")).Padding(0, 1).Width(boxWidth - 4)
+	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+
+	input := inputStyle.Render(m.sessionNameInput)
+	lines := []string{
+		titleStyle.Render("New tmux session"),
+		"Session name:",
+		input,
+	}
+
+	if m.sessionPromptError != "" {
+		lines = append(lines, errorStyle.Render(m.sessionPromptError))
+	}
+
+	lines = append(lines, footerStyle.Render("Enter: create | Esc: cancel | Ctrl+C: exit"))
+
+	panel := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		Padding(1, 2).
+		Width(boxWidth).
+		Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, panel)
 }
 
 func (m *Model) pluralize(count int) string {
@@ -494,11 +546,135 @@ func (m Model) fetchGitStatusAsync(repoPath string) tea.Cmd {
 	}
 }
 
+func validateSessionNameInput(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return errors.New("session name required")
+	}
+	return nil
+}
+
+func (m *Model) startSessionPrompt() {
+	m.mode = modeSessionPrompt
+	m.sessionNameInput = ""
+	m.sessionPromptError = ""
+	m.statusMessage = ""
+}
+
+func (m *Model) cancelSessionPrompt() {
+	m.mode = modeRepositoryList
+	m.sessionNameInput = ""
+	m.sessionPromptError = ""
+}
+
+func (m *Model) selectedRepositoryPath() (string, bool) {
+	if len(m.filtered) == 0 || m.selectedIdx >= len(m.filtered) {
+		return "", false
+	}
+	return m.filtered[m.selectedIdx].Path, true
+}
+
+func (m *Model) executeTmuxAction(action config.TmuxOpenAction) (tea.Model, tea.Cmd) {
+	repoPath, ok := m.selectedRepositoryPath()
+	if !ok {
+		return m, nil
+	}
+
+	if action != config.TmuxOpenEditor && !tmux.IsAvailable() {
+		m.statusMessage = "tmux is not available"
+		return m, nil
+	}
+
+	var err error
+	switch action {
+	case config.TmuxOpenWindow:
+		err = tmux.OpenWindow(repoPath)
+	case config.TmuxOpenVerticalPane:
+		err = tmux.OpenVerticalPane(repoPath)
+	case config.TmuxOpenHorizontalPane:
+		err = tmux.OpenHorizontalPane(repoPath)
+	case config.TmuxOpenSession:
+		m.startSessionPrompt()
+		return m, nil
+	case config.TmuxOpenEditor:
+		selected := m.filtered[m.selectedIdx]
+		selectedRepository = &selected
+		return m, tea.Quit
+	default:
+		selected := m.filtered[m.selectedIdx]
+		selectedRepository = &selected
+		return m, tea.Quit
+	}
+
+	if err != nil {
+		m.statusMessage = err.Error()
+		return m, nil
+	}
+
+	selectedRepository = nil
+	return m, tea.Quit
+}
+
+func (m *Model) submitSessionPrompt() (tea.Model, tea.Cmd) {
+	if err := validateSessionNameInput(m.sessionNameInput); err != nil {
+		m.sessionPromptError = err.Error()
+		return m, nil
+	}
+
+	repoPath, ok := m.selectedRepositoryPath()
+	if !ok {
+		m.cancelSessionPrompt()
+		return m, nil
+	}
+
+	if err := tmux.OpenSession(strings.TrimSpace(m.sessionNameInput), repoPath); err != nil {
+		m.sessionPromptError = err.Error()
+		return m, nil
+	}
+
+	selectedRepository = nil
+	return m, tea.Quit
+}
+
 func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.mode == modeSessionPrompt {
+		switch msg.String() {
+		case "ctrl+c":
+			selectedRepository = nil
+			return m, tea.Quit
+		case "esc":
+			m.cancelSessionPrompt()
+			return m, nil
+		case "enter":
+			return m.submitSessionPrompt()
+		case "backspace":
+			if len(m.sessionNameInput) > 0 {
+				m.sessionNameInput = m.sessionNameInput[:len(m.sessionNameInput)-1]
+			}
+			m.sessionPromptError = ""
+			return m, nil
+		default:
+			m.sessionNameInput += msg.String()
+			m.sessionPromptError = ""
+			return m, nil
+		}
+	}
+
 	switch msg.String() {
 	case "ctrl+c", "esc":
 		selectedRepository = nil
 		return m, tea.Quit
+
+	case "alt+w":
+		return m.executeTmuxAction(config.TmuxOpenWindow)
+
+	case "alt+v":
+		return m.executeTmuxAction(config.TmuxOpenVerticalPane)
+
+	case "alt+h":
+		return m.executeTmuxAction(config.TmuxOpenHorizontalPane)
+
+	case "alt+s":
+		return m.executeTmuxAction(config.TmuxOpenSession)
 
 	case "ctrl+o": // Open file manager
 		if len(m.filtered) > 0 {
@@ -557,6 +733,10 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "enter":
 		if len(m.filtered) > 0 {
+			if tmux.IsAvailable() {
+				return m.executeTmuxAction(m.config.GetTmuxDefaultOpenAction())
+			}
+
 			selected := m.filtered[m.selectedIdx]
 			selectedRepository = &selected
 			return m, tea.Quit
