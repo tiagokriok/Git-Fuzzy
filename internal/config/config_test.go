@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -210,6 +211,131 @@ func TestLoad_ValidTmuxDefaultOpenActionPreserved(t *testing.T) {
 	assertNoError(t, err)
 
 	assertEqual(t, TmuxOpenWindow, cfg.GetTmuxDefaultOpenAction(), "valid tmux default open action")
+}
+
+func TestDefaultConfig_ThemeDefaultsToAuto(t *testing.T) {
+	cfg, err := DefaultConfig()
+	assertNoError(t, err)
+
+	assertEqual(t, string(ThemeModeAuto), cfg.Theme.Mode, "direct theme mode")
+
+	themeCfg := cfg.GetThemeConfig()
+	assertEqual(t, string(ThemeModeAuto), themeCfg.Mode, "theme mode via getter")
+}
+
+func TestLoad_MissingThemeDefaultsToAuto(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "config.json")
+
+	jsonData := []byte(`{
+		"editor": "nvim",
+		"search_paths": ["/home/user/dev"]
+	}`)
+	assertNoError(t, os.WriteFile(configFile, jsonData, 0644))
+
+	cfg, err := load(configFile)
+	assertNoError(t, err)
+
+	themeCfg := cfg.GetThemeConfig()
+	assertEqual(t, string(ThemeModeAuto), themeCfg.Mode, "missing theme mode")
+}
+
+func TestLoad_InvalidThemeModeDefaultsToAuto(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "config.json")
+
+	jsonData := []byte(`{
+		"editor": "nvim",
+		"search_paths": ["/home/user/dev"],
+		"theme": {"mode": "bad-mode"}
+	}`)
+	assertNoError(t, os.WriteFile(configFile, jsonData, 0644))
+
+	cfg, err := load(configFile)
+	assertNoError(t, err)
+
+	themeCfg := cfg.GetThemeConfig()
+	assertEqual(t, string(ThemeModeAuto), themeCfg.Mode, "invalid theme mode")
+}
+
+func TestLoad_ValidThemeModesPreserved(t *testing.T) {
+	tests := []struct {
+		name string
+		mode string
+	}{
+		{name: "auto", mode: string(ThemeModeAuto)},
+		{name: "default", mode: string(ThemeModeDefault)},
+		{name: "omarchy", mode: string(ThemeModeOmarchy)},
+		{name: "file", mode: string(ThemeModeFile)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configFile := filepath.Join(tmpDir, "config.json")
+
+			jsonData := []byte(fmt.Sprintf(`{
+				"editor": "nvim",
+				"search_paths": ["/home/user/dev"],
+				"theme": {"mode": %q, "path": "~/theme.json"}
+			}`, tt.mode))
+			assertNoError(t, os.WriteFile(configFile, jsonData, 0644))
+
+			cfg, err := load(configFile)
+			assertNoError(t, err)
+
+			themeCfg := cfg.GetThemeConfig()
+			assertEqual(t, tt.mode, themeCfg.Mode, "theme mode")
+			assertEqual(t, "~/theme.json", themeCfg.Path, "theme path")
+		})
+	}
+}
+
+func TestSave_NormalizesThemeWithoutExplicitSetting(t *testing.T) {
+	cfg := &Config{
+		Editor:      "vim",
+		SearchPaths: []string{"/test"},
+	}
+
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "config.json")
+
+	err := save(configFile, cfg)
+	assertNoError(t, err)
+
+	// Raw JSON must contain the canonical theme object
+	raw, err := os.ReadFile(configFile)
+	assertNoError(t, err)
+	rawStr := string(raw)
+	if !strings.Contains(rawStr, `"theme":`) {
+		t.Errorf("expected raw JSON to contain a theme object, got: %s", rawStr)
+	}
+	if !strings.Contains(rawStr, `"mode": "auto"`) {
+		t.Errorf("expected raw JSON to contain \"mode\": \"auto\", got: %s", rawStr)
+	}
+
+	// Round-trip: loaded config must have auto theme
+	loaded, err := load(configFile)
+	assertNoError(t, err)
+	assertEqual(t, string(ThemeModeAuto), loaded.Theme.Mode, "loaded theme mode after save without theme")
+}
+
+func TestSave_NormalizesTmuxDefaultOpenAction(t *testing.T) {
+	cfg := &Config{
+		Editor:                "vim",
+		SearchPaths:           []string{"/test"},
+		TmuxDefaultOpenAction: "invalid-action",
+	}
+
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "config.json")
+
+	err := save(configFile, cfg)
+	assertNoError(t, err)
+
+	loaded, err := load(configFile)
+	assertNoError(t, err)
+	assertEqual(t, string(TmuxOpenEditor), loaded.TmuxDefaultOpenAction, "normalized tmux action after save")
 }
 
 func TestLoad_InvalidJSON(t *testing.T) {

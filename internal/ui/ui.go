@@ -15,6 +15,7 @@ import (
 	"github.com/tiagokriok/Git-Fuzzy/internal/git"
 	"github.com/tiagokriok/Git-Fuzzy/internal/platform"
 	"github.com/tiagokriok/Git-Fuzzy/internal/scanner"
+	"github.com/tiagokriok/Git-Fuzzy/internal/theme"
 	"github.com/tiagokriok/Git-Fuzzy/internal/tmux"
 )
 
@@ -46,6 +47,11 @@ type debounceTickMsg struct {
 	repoPath string
 }
 
+type themeRefreshMsg struct {
+	theme   theme.Theme
+	warning *theme.Warning
+}
+
 type Model struct {
 	repositories       []scanner.Repository
 	filtered           []scanner.Repository
@@ -64,24 +70,33 @@ type Model struct {
 	statusMessage      string
 	sessionNameInput   string
 	sessionPromptError string
+	theme              theme.Theme
+	themeWarning       *theme.Warning
+	styles             Styles
+	themeConfig        config.ThemeConfig
 }
 
-func NewModel(repos []scanner.Repository, cfg *config.Config) Model {
+func NewModel(repos []scanner.Repository, cfg *config.Config, appTheme theme.Theme, warning *theme.Warning) Model {
 	return Model{
 		repositories: repos,
 		filtered:     repos,
 		selectedIdx:  0,
 		config:       cfg,
 		mode:         modeRepositoryList,
+		theme:        appTheme,
+		themeWarning: warning,
+		styles:       NewStyles(appTheme),
+		themeConfig:  cfg.GetThemeConfig(),
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	// Fetch git status for first repository (no debounce delay)
+	var cmds []tea.Cmd
+	cmds = append(cmds, scheduleThemeRefresh(m.themeConfig))
 	if len(m.repositories) > 0 {
-		return m.fetchGitStatusAsync(m.repositories[0].Path)
+		cmds = append(cmds, m.fetchGitStatusAsync(m.repositories[0].Path))
 	}
-	return nil
+	return tea.Batch(cmds...)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -112,6 +127,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.gitStatusScroll = 0
 		}
 		return m, nil
+	case themeRefreshMsg:
+		if msg.theme != m.theme {
+			m.theme = msg.theme
+			m.styles = NewStyles(msg.theme)
+		}
+		m.themeWarning = msg.warning
+		return m, scheduleThemeRefresh(m.themeConfig)
 	}
 	return m, nil
 }
@@ -151,19 +173,19 @@ func (m Model) View() string {
 
 func (m Model) renderLeftPanel(width int) string {
 	searchBoxWidth := min(width-4, 50)
-	searchBoxStyle := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("205")).Padding(0, 1).Width(searchBoxWidth).Align(lipgloss.Left)
+	searchBoxStyle := m.styles.SearchBox.Width(searchBoxWidth)
 
-	selectedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("46")).Bold(true)
+	selectedStyle := m.styles.Selected
 
 	availableHeight := max(m.height-footerHeight-4, 3)
 
-	searchLabel := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("Search:")
+	searchLabel := m.styles.Muted.Render("Search:")
 	searchInput := m.searchInput
 	searchBox := searchBoxStyle.Render(searchInput)
 
 	var reposList string
 	if len(m.filtered) == 0 {
-		emptyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Italic(true)
+		emptyStyle := m.styles.MutedItalic
 		reposList = emptyStyle.Render("No repositories found")
 	} else {
 		var lines []string
@@ -196,15 +218,12 @@ func (m Model) renderLeftPanel(width int) string {
 		reposList = strings.Join(lines, "\n")
 	}
 	paginationInfo := m.getPaginationInfo()
-	paginationStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Italic(true)
+	paginationStyle := m.styles.MutedItalic
 	pagination := paginationStyle.Render(paginationInfo)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, searchLabel, searchBox, "", reposList, pagination)
 
-	panelStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		Padding(1).
+	panelStyle := m.styles.Panel.
 		Width(width).
 		Height(m.height - footerHeight - 2)
 
@@ -213,35 +232,24 @@ func (m Model) renderLeftPanel(width int) string {
 
 func (m Model) renderRightPanel(width int) string {
 	// Panel title
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("205")).
-		Padding(0, 1)
+	titleStyle := m.styles.Title.Padding(0, 1)
 	title := titleStyle.Render("📊 Git Status")
 
 	var content string
 
 	if len(m.filtered) == 0 {
 		// No repositories
-		emptyStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
-			Italic(true).
-			Padding(2, 1)
+		emptyStyle := m.styles.MutedItalic.Padding(2, 1)
 		content = emptyStyle.Render("No repository selected")
 
 	} else if m.gitStatusLoading {
 		// Loading state
-		loadingStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
-			Italic(true).
-			Padding(2, 1)
+		loadingStyle := m.styles.MutedItalic.Padding(2, 1)
 		content = loadingStyle.Render("Loading git status...")
 
 	} else if m.gitStatusError != nil {
 		// Error state
-		errorStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196")).
-			Padding(2, 1)
+		errorStyle := m.styles.Error.Padding(2, 1)
 		content = errorStyle.Render(fmt.Sprintf("⚠ Error:\n\n%s", m.gitStatusError.Error()))
 
 	} else if m.gitStatusData != nil {
@@ -249,18 +257,12 @@ func (m Model) renderRightPanel(width int) string {
 		content = m.renderGitStatusContent(width)
 	} else {
 		// Initial state (no data fetched yet)
-		emptyStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
-			Italic(true).
-			Padding(2, 1)
+		emptyStyle := m.styles.MutedItalic.Padding(2, 1)
 		content = emptyStyle.Render("Select a repository to view status")
 	}
 
 	// Wrap in border
-	panelStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		Padding(1).
+	panelStyle := m.styles.Panel.
 		Width(width).
 		Height(m.height - footerHeight - 2)
 
@@ -272,7 +274,7 @@ func (m Model) renderGitStatusContent(width int) string {
 
 	// Branch header
 	branchStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("46")).
+		Foreground(m.styles.Branch).
 		Bold(true).
 		Padding(0, 1)
 	branchHeader := branchStyle.Render(fmt.Sprintf("🌿 %s", data.CurrentBranch))
@@ -280,9 +282,7 @@ func (m Model) renderGitStatusContent(width int) string {
 	// Tracking branch
 	var trackingLine string
 	if data.TrackingBranch != "" {
-		trackingStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
-			Padding(0, 1)
+		trackingStyle := m.styles.Muted.Padding(0, 1)
 		trackingLine = trackingStyle.Render(fmt.Sprintf("└─ tracking: %s", data.TrackingBranch))
 	}
 
@@ -305,7 +305,7 @@ func (m Model) renderGitStatusContent(width int) string {
 }
 
 func (m Model) renderStatsSection(data *git.StatusData) string {
-	statsStyle := lipgloss.NewStyle().Padding(0, 1).Foreground(lipgloss.Color("250"))
+	statsStyle := m.styles.Muted.Padding(0, 1)
 
 	var statLines []string
 
@@ -313,14 +313,14 @@ func (m Model) renderStatsSection(data *git.StatusData) string {
 	if data.AheadCount > 0 || data.BehindCount > 0 {
 		aheadBehind := ""
 		if data.AheadCount > 0 {
-			aheadStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("46"))
+			aheadStyle := lipgloss.NewStyle().Foreground(m.styles.Success)
 			aheadBehind += aheadStyle.Render(fmt.Sprintf("⬆ %d", data.AheadCount))
 		}
 		if data.BehindCount > 0 {
 			if aheadBehind != "" {
 				aheadBehind += "  "
 			}
-			behindStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+			behindStyle := lipgloss.NewStyle().Foreground(m.styles.Danger)
 			aheadBehind += behindStyle.Render(fmt.Sprintf("⬇ %d", data.BehindCount))
 		}
 		statLines = append(statLines, statsStyle.Render(aheadBehind))
@@ -334,19 +334,19 @@ func (m Model) renderStatsSection(data *git.StatusData) string {
 
 		breakdown := ""
 		if data.AddedCount > 0 {
-			breakdown += lipgloss.NewStyle().Foreground(lipgloss.Color("46")).Render(fmt.Sprintf("+%d", data.AddedCount)) + " "
+			breakdown += lipgloss.NewStyle().Foreground(m.styles.Success).Render(fmt.Sprintf("+%d", data.AddedCount)) + " "
 		}
 		if data.ModifiedCount > 0 {
-			breakdown += lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Render(fmt.Sprintf("~%d", data.ModifiedCount)) + " "
+			breakdown += lipgloss.NewStyle().Foreground(m.styles.Warning).Render(fmt.Sprintf("~%d", data.ModifiedCount)) + " "
 		}
 		if data.DeletedCount > 0 {
-			breakdown += lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Render(fmt.Sprintf("-%d", data.DeletedCount))
+			breakdown += lipgloss.NewStyle().Foreground(m.styles.Danger).Render(fmt.Sprintf("-%d", data.DeletedCount))
 		}
 		if data.UntrackedCount > 0 {
 			if breakdown != "" {
 				breakdown += " "
 			}
-			breakdown += lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Render(fmt.Sprintf("?%d", data.UntrackedCount))
+			breakdown += lipgloss.NewStyle().Foreground(m.styles.Untracked).Render(fmt.Sprintf("?%d", data.UntrackedCount))
 		}
 		if breakdown != "" {
 			summary += " (" + strings.Trim(breakdown, " ") + ")"
@@ -359,11 +359,7 @@ func (m Model) renderStatsSection(data *git.StatusData) string {
 }
 
 func (m Model) renderFilesSection(data *git.StatusData, width int) string {
-	accentColor := lipgloss.Color("205")
-
-	filesTitle := lipgloss.NewStyle().
-		Foreground(accentColor).
-		Bold(true).
+	filesTitle := m.styles.Title.
 		Padding(0, 1).
 		Render("📝 Files")
 
@@ -379,19 +375,16 @@ func (m Model) renderFilesSection(data *git.StatusData, width int) string {
 	}
 
 	if len(data.Files) == 0 {
-		cleanStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240")).
-			Italic(true).
-			Padding(0, 1)
+		cleanStyle := m.styles.MutedItalic.Padding(0, 1)
 		fileLines = append(fileLines, cleanStyle.Render("✓ Working tree clean"))
 	} else {
 		statusColors := map[string]lipgloss.Color{
-			"M":  lipgloss.Color("220"), // Yellow for modified
-			"A":  lipgloss.Color("46"),  // Green for added
-			"D":  lipgloss.Color("196"), // Red for deleted
-			"R":  lipgloss.Color("171"), // Magenta for renamed
-			"C":  lipgloss.Color("51"),  // Cyan for copied
-			"??": lipgloss.Color("33"),  // Blue for untracked
+			"M":  m.styles.Warning,
+			"A":  m.styles.Success,
+			"D":  m.styles.Danger,
+			"R":  m.styles.Renamed,
+			"C":  m.styles.Copied,
+			"??": m.styles.Untracked,
 		}
 
 		statusSymbols := map[string]string{
@@ -412,9 +405,7 @@ func (m Model) renderFilesSection(data *git.StatusData, width int) string {
 				symbol = "📄"
 			}
 
-			fileStyle := lipgloss.NewStyle().
-				Foreground(color).
-				Padding(0, 1)
+			fileStyle := lipgloss.NewStyle().Foreground(color).Padding(0, 1)
 
 			// Truncate long filenames from the left
 			filename := truncatePathLeft(file.Filename, maxFilenameWidth)
@@ -428,7 +419,7 @@ func (m Model) renderFilesSection(data *git.StatusData, width int) string {
 	// Scroll indicator
 	var scrollIndicator string
 	if len(data.Files) > visibleHeight {
-		scrollStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Italic(true)
+		scrollStyle := m.styles.MutedItalic
 		current := min(m.gitStatusScroll+visibleHeight, len(data.Files))
 		scrollIndicator = scrollStyle.Render(
 			fmt.Sprintf("(Shift+↑/↓ to scroll: %d-%d of %d)",
@@ -445,9 +436,11 @@ func (m Model) renderFilesSection(data *git.StatusData, width int) string {
 }
 
 func (m Model) renderFooter() string {
-	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Align(lipgloss.Center)
+	footerStyle := m.styles.Footer
 	footerText := "↑/↓: nav repos | Shift+↑/↓: scroll status | Enter: open | Alt+w/v/h/s: tmux | ^O: files | ^T: term | ^B: remote | ^G: refresh | Esc: exit"
-	if m.statusMessage != "" {
+	if m.themeWarning != nil {
+		footerText = m.themeWarning.Message + " | " + footerText
+	} else if m.statusMessage != "" {
 		footerText = m.statusMessage + " | " + footerText
 	}
 	return footerStyle.Render(footerText)
@@ -456,10 +449,10 @@ func (m Model) renderFooter() string {
 func (m Model) renderSessionPrompt() string {
 	boxWidth := min(max(m.width-8, 40), 80)
 
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	inputStyle := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240")).Padding(0, 1).Width(boxWidth - 4)
-	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	titleStyle := m.styles.Title
+	inputStyle := m.styles.SearchBox.Width(boxWidth - 4)
+	errorStyle := m.styles.Error
+	footerStyle := m.styles.Muted
 
 	input := inputStyle.Render(m.sessionNameInput)
 	lines := []string{
@@ -474,9 +467,7 @@ func (m Model) renderSessionPrompt() string {
 
 	lines = append(lines, footerStyle.Render("Enter: create | Esc: cancel | Ctrl+C: exit"))
 
-	panel := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("240")).
+	panel := m.styles.Panel.
 		Padding(1, 2).
 		Width(boxWidth).
 		Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
@@ -544,6 +535,16 @@ func (m Model) fetchGitStatusAsync(repoPath string) tea.Cmd {
 			repoPath: repoPath,
 		}
 	}
+}
+
+func scheduleThemeRefresh(cfg config.ThemeConfig) tea.Cmd {
+	return tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
+		loadedTheme, warning := theme.Load(cfg)
+		return themeRefreshMsg{
+			theme:   loadedTheme,
+			warning: warning,
+		}
+	})
 }
 
 func validateSessionNameInput(name string) error {
@@ -846,10 +847,10 @@ func GetSelectedRepository() *scanner.Repository {
 	return selectedRepository
 }
 
-func Run(repos []scanner.Repository, cfg *config.Config) (*scanner.Repository, error) {
+func Run(repos []scanner.Repository, cfg *config.Config, appTheme theme.Theme, warning *theme.Warning) (*scanner.Repository, error) {
 	selectedRepository = nil
 
-	model := NewModel(repos, cfg)
+	model := NewModel(repos, cfg, appTheme, warning)
 
 	p := tea.NewProgram(model)
 
